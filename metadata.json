@@ -1,0 +1,5 @@
+{
+  "name": "Goldyme",
+  "description": "A web application that provides free, continuously updated live gold trading analytics and price trends in real time. Users can select their preferred language and view key metrics in a modern, responsive dashboard.",
+  "requestFramePermissions": []
+}

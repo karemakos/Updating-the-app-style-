@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Goldyme - Live Gold Analytics</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'petroleum-green': '#006a6a',
+              'dark-orange': '#cc5500',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Babel for in-browser JSX & TypeScript transpilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Map for ES Modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "recharts": "https://esm.sh/recharts@2.12.7",
+            "@google/genai": "https://esm.sh/@google/generative-ai"
+        }
+    }
+    </script>
+</head>
+<body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    
+    <!-- Single script containing the entire React application -->
+    <script type="text/babel" data-presets="react,typescript" data-type="module">
+        //============== Main Imports ==============
+        import React, { useState, useMemo, createContext, useContext, ReactNode, useCallback, useEffect } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+        import { GoogleGenAI } from "@google/genai";
+
+        //============== types.ts ==============
+        // TypeScript types are used for development and stripped by Babel during transpilation.
+        type Language = 'en' | 'ar' | 'es' | 'hi';
+        type Direction = 'ltr' | 'rtl';
+        interface GoldData {
+          priceOunce: number;
+          priceGram: number;
+          dailyChange: number;
+          weeklyChange: number;
+        }
+        interface ChartDataPoint {
+          time: string;
+          price: number;
+        }
+
+        //============== data/translations.ts ==============
+        const translations = {
+          en: {
+            appName: 'Goldyme',
+            tagline: 'Live Gold Trading Analytics',
+            selectLanguage: 'Select Your Language',
+            backToHome: 'Back to Home',
+            pricePerOunce: 'Price / Ounce',
+            pricePerGram: 'Price / Gram',
+            dailyChange: 'Daily Change',
+            weeklyChange: 'Weekly Change',
+            priceTrend: 'Price Trend (Last 24h)',
+            aiSummary: 'AI-Powered Summary',
+            generatingSummary: 'Generating summary...',
+            home: 'Home',
+            analytics: 'Analytics',
+            about: 'About',
+            terms: 'Terms & Conditions',
+            privacyPolicy: 'Privacy Policy',
+            contact: 'Contact',
+            languageSettings: 'Language',
+            aboutTitle: 'About Goldyme',
+            aboutContent: 'Goldyme offers real-time gold price analytics to help you stay informed about the market. Our data is sourced from public APIs and is intended for informational purposes only.',
+            termsTitle: 'Terms & Conditions',
+            termsLink: 'For full terms, please visit:',
+            termsDisclaimer1: 'The information provided by Goldyme is for informational purposes only and should not be considered financial advice.',
+            termsDisclaimer2: 'We do not collect any personal data. All settings are stored locally on your device.',
+            termsDisclaimer3: 'Users are solely responsible for their financial and trading decisions.',
+            termsDisclaimer4: 'Data is provided by public APIs and may not always be 100% accurate. We are not liable for any inaccuracies.',
+          },
+          es: {
+            appName: 'Goldyme',
+            tagline: 'Análisis de Trading de Oro en Vivo',
+            selectLanguage: 'Seleccione su Idioma',
+            backToHome: 'Volver al Inicio',
+            pricePerOunce: 'Precio / Onza',
+            pricePerGram: 'Precio / Gramo',
+            dailyChange: 'Cambio Diario',
+            weeklyChange: 'Cambio Semanal',
+            priceTrend: 'Tendencia de Precios (Últimas 24h)',
+            aiSummary: 'Resumen con IA',
+            generatingSummary: 'Generando resumen...',
+            home: 'Inicio',
+            analytics: 'Análisis',
+            about: 'Sobre',
+            terms: 'Términos y Condiciones',
+            privacyPolicy: 'Política de Privacidad',
+            contact: 'Contacto',
+            languageSettings: 'Idioma',
+            aboutTitle: 'Sobre Goldyme',
+            aboutContent: 'Goldyme ofrece análisis del precio del oro en tiempo real para ayudarle a mantenerse informado sobre el mercado. Nuestros datos provienen de API públicas y son solo para fines informativos.',
+            termsTitle: 'Términos y Condiciones',
+            termsLink: 'Para ver los términos completos, visite:',
+            termsDisclaimer1: 'La información proporcionada por Goldyme es solo para fines informativos y no debe considerarse asesoramiento financiero.',
+            termsDisclaimer2: 'No recopilamos ningún dato personal. Todas las configuraciones se almacenan localmente en su dispositivo.',
+            termsDisclaimer3: 'Los usuarios son los únicos responsables de sus decisiones financieras y comerciales.',
+            termsDisclaimer4: 'Los datos son proporcionados por API públicas y pueden no ser siempre 100% precisos. No nos hacemos responsables de ninguna inexactitud.',
+          },
+          ar: {
+            appName: 'جولدايم',
+            tagline: 'تحليلات تداول الذهب المباشرة',
+            selectLanguage: 'اختر لغتك',
+            backToHome: 'العودة للرئيسية',
+            pricePerOunce: 'السعر / أونصة',
+            pricePerGram: 'السعر / جرام',
+            dailyChange: 'التغيير اليومي',
+            weeklyChange: 'التغيير الأسبوعي',
+            priceTrend: 'اتجاه السعر (آخر 24 ساعة)',
+            aiSummary: 'ملخص مدعوم بالذكاء الاصطناعي',
+            generatingSummary: 'جاري إنشاء الملخص...',
+            home: 'الرئيسية',
+            analytics: 'التحليلات',
+            about: 'حول',
+            terms: 'الشروط والأحكام',
+            privacyPolicy: 'سياسة الخصوصية',
+            contact: 'اتصل بنا',
+            languageSettings: 'اللغة',
+            aboutTitle: 'حول جولدايم',
+            aboutContent: 'يقدم جولدايم تحليلات أسعار الذهب في الوقت الفعلي لمساعدتك على البقاء على اطلاع بالسوق. يتم الحصول على بياناتنا من واجهات برمجة التطبيقات العامة وهي مخصصة للأغراض الإعلامية فقط.',
+            termsTitle: 'الشروط والأحكام',
+            termsLink: 'للاطلاع على الشروط الكاملة، يرجى زيارة:',
+            termsDisclaimer1: 'المعلومات المقدمة من جولدايم هي لأغراض إعلامية فقط ولا ينبغي اعتبارها نصيحة مالية.',
+            termsDisclaimer2: 'نحن لا نجمع أي بيانات شخصية. يتم تخزين جميع الإعدادات محليًا على جهازك.',
+            termsDisclaimer3: 'المستخدمون هم المسؤولون وحدهم عن قراراتهم المالية والتجارية.',
+            termsDisclaimer4: 'يتم توفير البيانات من خلال واجهات برمجة التطبيقات العامة وقد لا تكون دقيقة بنسبة 100٪ دائمًا. نحن غير مسؤولين عن أي عدم دقة.',
+          },
+          hi: {
+            appName: 'गोल्डाइम',
+            tagline: 'लाइव गोल्ड ट्रेडिंग एनालिटिक्स',
+            selectLanguage: 'अपनी भाषा चुनें',
+            backToHome: 'होम पर वापस जाएं',
+            pricePerOunce: 'मूल्य / औंस',
+            pricePerGram: 'मूल्य / ग्राम',
+            dailyChange: 'दैनिक परिवर्तन',
+            weeklyChange: 'साप्ताहिक परिवर्तन',
+            priceTrend: 'मूल्य की प्रवृत्ति (पिछले 24 घंटे)',
+            aiSummary: 'एआई-संचालित सारांश',
+            generatingSummary: 'सारांश बना रहा है...',
+            home: 'होम',
+            analytics: 'एनालिटिक्स',
+            about: 'बारे में',
+            terms: 'नियम और शर्तें',
+            privacyPolicy: 'गोपनीयता नीति',
+            contact: 'संपर्क',
+            languageSettings: 'भाषा',
+            aboutTitle: 'गोल्डाइम के बारे में',
+            aboutContent: 'गोल्डाइम आपको बाजार के बारे में सूचित रहने में मदद करने के लिए वास्तविक समय में सोने की कीमत का विश्लेषण प्रदान करता है। हमारा डेटा सार्वजनिक एपीआई से प्राप्त किया जाता है और केवल सूचना के उद्देश्यों के लिए है।',
+            termsTitle: 'नियम और शर्तें',
+            termsLink: 'पूर्ण शर्तों के लिए, कृपया देखें:',
+            termsDisclaimer1: 'गोल्डाइम द्वारा प्रदान की गई जानकारी केवल सूचना के उद्देश्यों के लिए है और इसे वित्तीय सलाह नहीं माना जाना चाहिए।',
+            termsDisclaimer2: 'हम कोई व्यक्तिगत डेटा एकत्र नहीं करते हैं। सभी सेटिंग्स आपके डिवाइस पर स्थानीय रूप से संग्रहीत की जाती हैं।',
+            termsDisclaimer3: 'उपयोगकर्ता अपने वित्तीय और व्यापारिक निर्णयों के लिए पूरी तरह से जिम्मेदार हैं।',
+            termsDisclaimer4: 'डेटा सार्वजनिक एपीआई द्वारा प्रदान किया जाता है और हमेशा 100% सटीक नहीं हो सकता है। हम किसी भी अशुद्धि के लिए उत्तरदायी नहीं हैं।',
+          },
+        };
+
+        //============== context/LanguageContext.tsx ==============
+        interface LanguageContextType {
+          language: Language;
+          direction: Direction;
+          setLanguage: (lang: Language) => void;
+        }
+        const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+        const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+          const [language, setLanguageState] = useState<Language>('en');
+          const [direction, setDirection] = useState<Direction>('ltr');
+
+          const setLanguage = useCallback((lang: Language) => {
+            setLanguageState(lang);
+            const newDirection = (lang === 'ar' || lang === 'hi') ? 'rtl' : 'ltr';
+            setDirection(newDirection);
+            document.documentElement.lang = lang;
+            document.documentElement.dir = newDirection;
+          }, []);
+
+          return (
+            <LanguageContext.Provider value={{ language, direction, setLanguage }}>
+              {children}
+            </LanguageContext.Provider>
+          );
+        };
+        const useLanguage = (): LanguageContextType => {
+          const context = useContext(LanguageContext);
+          if (context === undefined) {
+            throw new Error('useLanguage must be used within a LanguageProvider');
+          }
+          return context;
+        };
+
+        //============== hooks/useTranslations.ts ==============
+        const useTranslations = () => {
+          const { language } = useLanguage();
+          return translations[language];
+        };
+        
+        //============== services/geminiService.ts ==============
+        const API_KEY = process.env.API_KEY;
+        let ai;
+        if (API_KEY) {
+          ai = new GoogleGenAI({ apiKey: API_KEY });
+        } else {
+          console.warn("Gemini API key not found. AI features will be disabled.");
+        }
+
+        const getGoldTrendSummary = async (trendData: ChartDataPoint[]): Promise<string> => {
+          if (!ai) {
+            return "AI summary is unavailable. API key is not configured.";
+          }
+
+          const simplifiedData = trendData.filter((_, i) => i % 4 === 0).map(p => p.price.toFixed(2)).join(', ');
+          const lastPrice = trendData.length > 0 ? trendData[trendData.length-1].price.toFixed(2) : 'N/A';
+          
+          const prompt = `
+            You are a financial analyst for a gold trading app called "Goldyme".
+            Analyze the following recent gold price data points (per ounce in USD): ${simplifiedData}.
+            The latest price is $${lastPrice}.
+            Write a brief, one-sentence summary for a user. Be neutral or slightly optimistic in tone.
+            Do not give financial advice.
+            Example: "Gold shows slight volatility but maintains a stable position, suggesting watchful optimism for traders."
+          `;
+
+          try {
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents: prompt,
+            });
+            return response.text.trim();
+          } catch (error) {
+            console.error("Gemini API call failed:", error);
+            throw new Error("Failed to generate summary.");
+          }
+        };
+
+        //============== components/Modal.tsx ==============
+        interface ModalProps {
+            isOpen: boolean;
+            onClose: () => void;
+            title: string;
+            children: ReactNode;
+        }
+        const XIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        );
+        const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4 transition-opacity duration-300"
+                    onClick={onClose}
+                    style={{ opacity: isOpen ? 1 : 0 }}
+                >
+                <div 
+                    className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg p-6 border border-gray-700 relative transform transition-all duration-300"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ transform: isOpen ? 'scale(1)' : 'scale(0.95)', opacity: isOpen ? 1 : 0 }}
+                >
+                    <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-white">{title}</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                        <XIcon />
+                    </button>
+                    </div>
+                    <div>{children}</div>
+                </div>
+                </div>
+            );
+        };
+
+        //============== components/Footer.tsx ==============
+        const Footer: React.FC = () => {
+            const t = useTranslations();
+            return (
+                <footer className="mt-12 pt-8 border-t border-gray-700 text-center text-gray-500">
+                    <div className="flex justify-center gap-6 mb-4">
+                        <a href="#" className="hover:text-dark-orange transition-colors">{t.privacyPolicy}</a>
+                        <a href="#" className="hover:text-dark-orange transition-colors">{t.contact}</a>
+                        <a href="#" className="hover:text-dark-orange transition-colors">{t.languageSettings}</a>
+                    </div>
+                    <p>&copy; {new Date().getFullYear()} {t.appName}. All Rights Reserved.</p>
+                </footer>
+            );
+        };
+
+        //============== components/Header.tsx ==============
+        interface HeaderProps {
+            onBackToHome: () => void;
+        }
+        const Header: React.FC<HeaderProps> = ({ onBackToHome }) => {
+          const t = useTranslations();
+          const [isAboutModalOpen, setAboutModalOpen] = useState(false);
+          const [isTermsModalOpen, setTermsModalOpen] = useState(false);
+          return (
+            <>
+              <header className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-dark-orange to-yellow-400 rounded-full flex items-center justify-center">
+                        <span className="text-xl font-bold text-white">G</span>
+                    </div>
+                  <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-dark-orange to-yellow-400">
+                    {t.appName}
+                  </h1>
+                </div>
+                <nav className="hidden md:flex items-center gap-6 text-gray-300">
+                  <button onClick={onBackToHome} className="hover:text-dark-orange transition-colors">{t.home}</button>
+                  <a href="#" className="text-dark-orange font-semibold">{t.analytics}</a>
+                  <button onClick={() => setAboutModalOpen(true)} className="hover:text-dark-orange transition-colors">{t.about}</button>
+                  <button onClick={() => setTermsModalOpen(true)} className="hover:text-dark-orange transition-colors">{t.terms}</button>
+                </nav>
+              </header>
+
+              <Modal isOpen={isAboutModalOpen} onClose={() => setAboutModalOpen(false)} title={t.aboutTitle}>
+                <p className="text-gray-300">{t.aboutContent}</p>
+              </Modal>
+
+              <Modal isOpen={isTermsModalOpen} onClose={() => setTermsModalOpen(false)} title={t.termsTitle}>
+                <div className="space-y-4 text-gray-300">
+                    <p>{t.termsDisclaimer1}</p>
+                    <p>{t.termsDisclaimer2}</p>
+                    <p>{t.termsDisclaimer3}</p>
+                    <p>{t.termsDisclaimer4}</p>
+                    <p className="pt-4 border-t border-gray-600">
+                        {t.termsLink} <a href="https://sites.google.com/view/goldyme/home" target="_blank" rel="noopener noreferrer" className="text-dark-orange hover:underline">Official Terms Page</a>.
+                    </p>
+                </div>
+              </Modal>
+            </>
+          );
+        };
+
+        //============== components/PriceCard.tsx ==============
+        interface PriceCardProps {
+            title: string;
+            value: number;
+            prefix?: string;
+            suffix?: string;
+            isChange?: boolean;
+        }
+        const TrendUpIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+        );
+        const TrendDownIcon = () => (
+             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+            </svg>
+        );
+        const PriceCard: React.FC<PriceCardProps> = ({ title, value, prefix = '', suffix = '', isChange = false }) => {
+            const isPositive = value >= 0;
+            const colorClass = isChange ? (isPositive ? 'text-green-400' : 'text-red-400') : 'text-yellow-400';
+            return (
+                <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-gray-700 transform transition-transform duration-300 hover:-translate-y-1">
+                <h3 className="text-gray-400 text-sm font-medium mb-2">{title}</h3>
+                <div className={`text-3xl font-bold flex items-center gap-2 ${colorClass}`}>
+                    {isChange && (isPositive ? <TrendUpIcon/> : <TrendDownIcon/>)}
+                    <span>{prefix}{value.toFixed(2)}{suffix}</span>
+                </div>
+                </div>
+            );
+        };
+
+        //============== components/TrendChart.tsx ==============
+        interface TrendChartProps {
+            data: ChartDataPoint[];
+        }
+        const TrendChart: React.FC<TrendChartProps> = ({ data }) => {
+            if (!data || data.length === 0) {
+                return <div className="flex items-center justify-center h-64 text-gray-500">Loading chart data...</div>;
+            }
+            return (
+                <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                    <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5, }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="time" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={(value) => `$${value}`} />
+                        <Tooltip contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', borderColor: '#4B5563', borderRadius: '0.5rem' }} labelStyle={{ color: '#F3F4F6' }} />
+                        <Line type="monotone" dataKey="price" stroke="#cc5500" strokeWidth={2} dot={false} />
+                    </LineChart>
+                </ResponsiveContainer>
+                </div>
+            );
+        };
+
+        //============== components/Summary.tsx ==============
+        interface SummaryProps {
+            trendData: ChartDataPoint[];
+        }
+        const Summary: React.FC<SummaryProps> = ({ trendData }) => {
+            const [summary, setSummary] = useState('');
+            const [isLoading, setIsLoading] = useState(true);
+            const t = useTranslations();
+
+            useEffect(() => {
+                const fetchSummary = async () => {
+                    if (trendData.length > 0) {
+                        setIsLoading(true);
+                        try {
+                            const result = await getGoldTrendSummary(trendData);
+                            setSummary(result);
+                        } catch (error) {
+                            console.error("Error fetching summary from Gemini API:", error);
+                            setSummary("Could not generate summary at this time.");
+                        } finally {
+                            setIsLoading(false);
+                        }
+                    }
+                };
+
+                const handler = setTimeout(() => { fetchSummary(); }, 1000);
+                return () => { clearTimeout(handler); };
+            }, [trendData]);
+            
+            return (
+                <div className="h-full flex flex-col justify-center">
+                {isLoading ? (
+                    <div className="flex items-center gap-2 text-gray-400">
+                        <div className="w-4 h-4 border-2 border-dashed rounded-full animate-spin border-dark-orange"></div>
+                        <span>{t.generatingSummary}</span>
+                    </div>
+                ) : (
+                    <p className="text-gray-300 text-lg leading-relaxed">{summary}</p>
+                )}
+                </div>
+            );
+        };
+
+        //============== components/Dashboard.tsx ==============
+        interface DashboardProps {
+            onBackToHome: () => void;
+        }
+        const BackArrowIcon = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+        );
+        const Dashboard: React.FC<DashboardProps> = ({ onBackToHome }) => {
+            const t = useTranslations();
+            const { direction } = useLanguage();
+            const [goldData, setGoldData] = useState<GoldData>({ priceOunce: 2350.55, priceGram: 75.57, dailyChange: 0.85, weeklyChange: -1.23 });
+            const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+
+            const generateInitialChartData = (basePrice) => {
+                const data: ChartDataPoint[] = [];
+                let price = basePrice;
+                const now = new Date();
+                for (let i = 23; i >= 0; i--) {
+                    const time = new Date(now.getTime() - i * 60 * 60 * 1000);
+                    data.push({
+                        time: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        price: parseFloat((price + (Math.random() - 0.5) * 10).toFixed(2)),
+                    });
+                }
+                return data;
+            };
+            
+            const updateData = useCallback(() => {
+                setGoldData(prevData => {
+                    const newPriceOunce = parseFloat((prevData.priceOunce + (Math.random() - 0.5) * 2).toFixed(2));
+                    return {
+                        priceOunce: newPriceOunce,
+                        priceGram: parseFloat((newPriceOunce / 31.1035).toFixed(2)),
+                        dailyChange: parseFloat((prevData.dailyChange + (Math.random() - 0.5) * 0.1).toFixed(2)),
+                        weeklyChange: parseFloat((prevData.weeklyChange + (Math.random() - 0.5) * 0.05).toFixed(2)),
+                    };
+                });
+                setChartData(prevData => {
+                    if (prevData.length === 0) return [];
+                    const lastPoint = prevData[prevData.length - 1];
+                    const newPrice = parseFloat((lastPoint.price + (Math.random() - 0.5) * 2).toFixed(2));
+                    const newTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                    return [...prevData.slice(1), { time: newTime, price: newPrice }];
+                });
+            }, []);
+
+            useEffect(() => {
+                setChartData(generateInitialChartData(goldData.priceOunce));
+                const interval = setInterval(updateData, 3000);
+                return () => clearInterval(interval);
+            }, [updateData, goldData.priceOunce]);
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-4 sm:p-6 lg:p-8">
+                    <div className="max-w-7xl mx-auto">
+                        <div className={`absolute top-4 ${direction === 'rtl' ? 'right-4' : 'left-4'}`}>
+                             <button 
+                                onClick={onBackToHome}
+                                className="flex items-center gap-2 text-gray-300 hover:text-dark-orange transition-colors duration-300 p-2 rounded-lg hover:bg-gray-800"
+                                >
+                                <BackArrowIcon />
+                                {t.backToHome}
+                            </button>
+                        </div>
+                        
+                        <Header onBackToHome={onBackToHome} />
+
+                        <main>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                                <PriceCard title={t.pricePerOunce} value={goldData.priceOunce} prefix="$" />
+                                <PriceCard title={t.pricePerGram} value={goldData.priceGram} prefix="$" />
+                                <PriceCard title={t.dailyChange} value={goldData.dailyChange} suffix="%" isChange={true} />
+                                <PriceCard title={t.weeklyChange} value={goldData.weeklyChange} suffix="%" isChange={true} />
+                            </div>
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-gray-700">
+                                    <h2 className="text-xl font-semibold mb-4 text-gray-200">{t.priceTrend}</h2>
+                                    <TrendChart data={chartData} />
+                                </div>
+                                <div className="bg-gray-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-gray-700">
+                                    <h2 className="text-xl font-semibold mb-4 text-gray-200">{t.aiSummary}</h2>
+                                    <Summary trendData={chartData} />
+                                </div>
+                            </div>
+                        </main>
+                        
+                        <Footer />
+                    </div>
+                </div>
+            );
+        };
+
+        //============== components/LanguageSelector.tsx ==============
+        interface LanguageSelectorProps {
+            onLanguageSelect: () => void;
+        }
+        const LanguageSelector: React.FC<LanguageSelectorProps> = ({ onLanguageSelect }) => {
+            const { setLanguage } = useLanguage();
+            const t = translations['en']; 
+            const handleSelect = (lang: Language) => {
+                setLanguage(lang);
+                onLanguageSelect();
+            };
+            const languages: { code: Language; name: string; nativeName: string }[] = [
+                { code: 'en', name: 'English', nativeName: 'English' },
+                { code: 'es', name: 'Spanish', nativeName: 'Español' },
+                { code: 'ar', name: 'Arabic', nativeName: 'العربية' },
+                { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+            ];
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-black p-4">
+                <div className="text-center">
+                    <h1 className="text-5xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-dark-orange to-yellow-400 mb-2">
+                    {t.appName}
+                    </h1>
+                    <p className="text-lg text-gray-300 mb-8">{t.tagline}</p>
+                    <h2 className="text-2xl text-white mb-6">{t.selectLanguage}</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
+                    {languages.map(({ code, name, nativeName }) => (
+                    <button
+                        key={code}
+                        onClick={() => handleSelect(code)}
+                        className="p-4 bg-gray-800 rounded-lg shadow-lg text-white text-lg transition-all duration-300 ease-in-out transform hover:scale-105 hover:bg-petroleum-green focus:outline-none focus:ring-2 focus:ring-dark-orange"
+                    >
+                        <span className="font-semibold">{name}</span>
+                        <span className="block text-gray-400 text-sm">{nativeName}</span>
+                    </button>
+                    ))}
+                </div>
+                </div>
+            );
+        };
+
+        //============== App.tsx ==============
+        type View = 'languageSelector' | 'dashboard';
+        const App: React.FC = () => {
+          const [view, setView] = useState<View>('languageSelector');
+
+          const showDashboard = () => setView('dashboard');
+          const showLanguageSelector = () => setView('languageSelector');
+          
+          const MainContent = useMemo(() => {
+            if (view === 'languageSelector') {
+              return <LanguageSelector onLanguageSelect={showDashboard} />;
+            }
+            return <Dashboard onBackToHome={showLanguageSelector} />;
+          }, [view]);
+
+          return (
+            <LanguageProvider>
+              <div className="bg-gray-900 min-h-screen text-white font-sans">
+                {MainContent}
+              </div>
+            </LanguageProvider>
+          );
+        };
+
+        //============== index.tsx (App Entry Point) ==============
+        const rootElement = document.getElementById('root');
+        if (!rootElement) {
+          throw new Error("Could not find root element to mount to");
+        }
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(
+          <React.StrictMode>
+            <App />
+          </React.StrictMode>
+        );
+    </script>
+</body>
+</html>
